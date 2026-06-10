@@ -1,0 +1,2 @@
+# Dev overlay — no overrides, inherits base values.
+# Dev clusters typically run with a single pilot replica and no resource requests.

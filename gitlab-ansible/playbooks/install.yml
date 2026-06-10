@@ -1,0 +1,38 @@
+---
+# ---------------------------------------------------------------------------
+# Playbook: install.yml
+# Installs and configures a self-hosted GitLab instance on an EC2 instance.
+#
+# Usage:
+#   ansible-playbook playbooks/install.yml \
+#     -i inventory/hosts.yml \
+#     --ask-vault-pass          # if using Ansible Vault for secrets
+# ---------------------------------------------------------------------------
+- name: Install and configure self-hosted GitLab on EC2
+  hosts: localhost
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Set system timezone to UTC
+      community.general.timezone:
+        name: UTC
+
+  roles:
+    - role: gitlab_install
+    - role: gitlab_configure
+
+  post_tasks:
+    - name: Print GitLab initial root password location
+      ansible.builtin.debug:
+        msg: >
+          GitLab installed successfully.
+          Initial root password: /etc/gitlab/initial_root_password
+          (deleted after 24 hours — change it immediately).
+          External URL: {{ gitlab_external_url }}

@@ -1,0 +1,101 @@
+---
+# ---------------------------------------------------------------------------
+# Role: gitlab_install
+# Installs GitLab Omnibus on Ubuntu 22.04 (Jammy) using the official
+# packages.gitlab.com APT repository.
+# ---------------------------------------------------------------------------
+
+- name: Ensure OS is Ubuntu 22.04
+  ansible.builtin.fail:
+    msg: "This role only supports Ubuntu 22.04 (Jammy). Detected: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+  when: ansible_distribution != "Ubuntu" or ansible_distribution_version != "22.04"
+
+- name: Set package version facts
+  ansible.builtin.set_fact:
+    _gitlab_pkg_suffix: "{{ 'ee' if gitlab_edition == 'gitlab-ee' else 'ce' }}"
+    _gitlab_pkg_version: "{{ gitlab_version }}-{{ 'ee' if gitlab_edition == 'gitlab-ee' else 'ce' }}.0"
+
+# ── Prerequisites ────────────────────────────────────────────────────────────
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install prerequisite packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+      - tzdata
+      - perl
+      - gnupg          # required for apt keyring import
+      - apt-transport-https
+    state: present
+
+# ── GitLab APT repository ────────────────────────────────────────────────────
+
+- name: Check if GitLab APT repo is already configured
+  ansible.builtin.stat:
+    path: /etc/apt/sources.list.d/gitlab_{{ gitlab_edition }}.list
+  register: gitlab_repo_file
+
+- name: Download GitLab repository setup script
+  ansible.builtin.get_url:
+    url: "https://packages.gitlab.com/install/repositories/gitlab/{{ gitlab_edition }}/script.deb.sh"
+    dest: /tmp/gitlab_repo_setup.sh
+    mode: "0755"
+    timeout: 30
+  when: not gitlab_repo_file.stat.exists
+
+- name: Run GitLab repository setup script
+  ansible.builtin.command: bash /tmp/gitlab_repo_setup.sh
+  when: not gitlab_repo_file.stat.exists
+  changed_when: true
+
+- name: Clean up repo setup script
+  ansible.builtin.file:
+    path: /tmp/gitlab_repo_setup.sh
+    state: absent
+
+- name: Update apt cache after adding GitLab repo
+  ansible.builtin.apt:
+    update_cache: true
+  when: not gitlab_repo_file.stat.exists
+
+# ── GitLab package installation ──────────────────────────────────────────────
+
+- name: Check if GitLab is already installed
+  ansible.builtin.command: dpkg-query -W -f='${Version}' {{ gitlab_edition }}
+  register: gitlab_installed_version
+  failed_when: false
+  changed_when: false
+
+- name: Install GitLab Omnibus (pinned version)
+  ansible.builtin.apt:
+    name: "{{ gitlab_edition }}={{ _gitlab_pkg_version }}"
+    state: present
+    allow_downgrade: false
+  environment:
+    EXTERNAL_URL: "{{ gitlab_external_url }}"
+  when: gitlab_installed_version.stdout != _gitlab_pkg_version
+  notify: reconfigure gitlab
+
+- name: Hold GitLab package at installed version (prevent unintended upgrades)
+  ansible.builtin.dpkg_selections:
+    name: "{{ gitlab_edition }}"
+    selection: hold
+
+# ── Service ───────────────────────────────────────────────────────────────────
+
+- name: Ensure GitLab runsvdir service is started and enabled
+  ansible.builtin.service:
+    name: gitlab-runsvdir
+    state: started
+    enabled: true
+
+- name: Wait for GitLab services to initialise
+  ansible.builtin.wait_for:
+    path: /var/opt/gitlab/gitlab-workhorse/socket
+    timeout: 120
+  when: gitlab_installed_version.stdout != _gitlab_pkg_version

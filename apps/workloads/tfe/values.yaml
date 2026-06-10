@@ -1,0 +1,29 @@
+# Helm values for the Terraform Enterprise (TFE) deployment
+# Chart: https://helm.releases.hashicorp.com (terraform-enterprise)
+# Chart version: pin to a specific release — update chart_version in app-config.yaml
+# Namespace: tfe (derived from app_name by the ApplicationSet)
+
+replicaCount: 1
+
+image:
+  # repository: hashicorp/terraform-enterprise
+  # tag: ""  # pin to a specific version
+
+tfe:
+  hostname: ""  # REQUIRED: set to the TFE FQDN (e.g. tfe.example.com)
+  # licenseSecretName: tfe-license  # ExternalSecret should provision this
+
+# tls:
+#   certData: ""
+#   keyData: ""
+#   caBundleData: ""
+
+service:
+  type: ClusterIP
+  # type: LoadBalancer  # use if exposing externally without Istio ingress gateway
+
+# ingress:
+#   enabled: false
+#   className: istio
+#   annotations: {}
+#   hosts: []

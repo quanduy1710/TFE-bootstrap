@@ -1,0 +1,15 @@
+# Helm values for the External Secrets Operator chart
+# Chart: https://charts.external-secrets.io (external-secrets)
+# Chart version: 0.9.x — update targetRevision in external-secrets-app.yaml
+#
+# ESO reads ExternalSecret CRs and syncs values from AWS Secrets Manager into
+# native Kubernetes Secrets via IRSA. Each workload namespace should define its
+# own ExternalSecret CRs pointing to the relevant Secrets Manager paths.
+
+replicaCount: 1
+
+webhook:
+  replicaCount: 1
+
+certController:
+  replicaCount: 1

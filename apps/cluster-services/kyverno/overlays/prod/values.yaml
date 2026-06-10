@@ -1,0 +1,12 @@
+# Prod overlay — HA replica counts for all controllers.
+admissionController:
+  replicas: 3
+
+backgroundController:
+  replicas: 2
+
+cleanupController:
+  replicas: 1
+
+reportsController:
+  replicas: 2

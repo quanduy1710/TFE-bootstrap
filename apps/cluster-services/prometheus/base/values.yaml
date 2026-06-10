@@ -1,0 +1,17 @@
+# Helm values for the kube-prometheus-stack chart
+# Chart: https://prometheus-community.github.io/helm-charts (kube-prometheus-stack)
+# Chart version: 55.x — update targetRevision in prometheus-app.yaml
+
+prometheusOperator:
+  enabled: true
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+
+grafana:
+  enabled: true
+  # adminPassword: set via ExternalSecret referencing AWS Secrets Manager
+
+alertmanager:
+  enabled: true

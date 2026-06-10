@@ -1,0 +1,7 @@
+# app-config.yaml — read by the ApplicationSet Git files generator.
+# Fields here become template variables in apps-appset.yaml.
+app_name: tfe
+helm_repo_url: https://helm.releases.hashicorp.com
+helm_chart: terraform-enterprise
+chart_version: "1.3.0"   # TODO: pin to a validated release
+# namespace: tfe          # optional — defaults to app_name if omitted

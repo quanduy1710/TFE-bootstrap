@@ -1,0 +1,60 @@
+---
+# ---------------------------------------------------------------------------
+# GitLab configuration variables
+# Sensitive values (passwords, tokens) should be stored in Ansible Vault.
+# See: ansible-vault encrypt_string '<value>' --name '<var_name>'
+# ---------------------------------------------------------------------------
+
+# External URL — must be reachable by users and GitLab runners
+gitlab_external_url: "https://gitlab.example.com"   # TODO: replace with real domain
+
+# GitLab edition: gitlab-ee (Enterprise) or gitlab-ce (Community)
+gitlab_edition: "gitlab-ce"
+
+# GitLab package version — pin to a specific release for reproducibility
+# Find releases at: https://packages.gitlab.com/gitlab/gitlab-ce
+gitlab_version: "18.11.3"
+
+# ---------------------------------------------------------------------------
+# SSL / TLS
+# Set gitlab_ssl_mode to one of: letsencrypt | self_signed | custom
+# ---------------------------------------------------------------------------
+gitlab_ssl_mode: "letsencrypt"
+gitlab_letsencrypt_email: "admin@example.com"       # TODO: replace with real email
+# Paths to existing cert/key — only used when gitlab_ssl_mode: self_signed
+gitlab_ssl_certificate: "/etc/gitlab/ssl/gitlab.crt"
+gitlab_ssl_certificate_key: "/etc/gitlab/ssl/gitlab.key"
+
+# ---------------------------------------------------------------------------
+# Timezone
+# ---------------------------------------------------------------------------
+gitlab_time_zone: "UTC"
+
+# ---------------------------------------------------------------------------
+# Backups
+# ---------------------------------------------------------------------------
+gitlab_backup_keep_time: 604800   # retain backups for 7 days (in seconds)
+
+# ---------------------------------------------------------------------------
+# SMTP (optional — set gitlab_smtp_enabled: true to enable)
+# smtp_tls and smtp_starttls_auto are mutually exclusive protocols:
+#   smtp_tls: true          → implicit TLS, typically port 465
+#   smtp_starttls_auto: true → STARTTLS upgrade, typically port 587
+# ---------------------------------------------------------------------------
+gitlab_smtp_enabled: false
+# gitlab_smtp_address: "smtp.example.com"
+# gitlab_smtp_port: 587
+# gitlab_smtp_user_name: "gitlab@example.com"
+# gitlab_smtp_password: !vault |                    # store in Vault
+#   $ANSIBLE_VAULT;1.1;AES256
+#   ...
+# gitlab_smtp_domain: "example.com"
+# gitlab_smtp_tls: false
+# gitlab_smtp_starttls_auto: true
+
+# ---------------------------------------------------------------------------
+# Resource tuning — adjust based on EC2 instance size
+# ---------------------------------------------------------------------------
+gitlab_puma_worker_processes: 2
+gitlab_sidekiq_concurrency: 10
+gitlab_postgresql_shared_buffers: "256MB"

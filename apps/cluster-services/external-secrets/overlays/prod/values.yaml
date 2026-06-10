@@ -1,0 +1,5 @@
+# Prod overlay — 2 replicas for HA.
+replicaCount: 2
+
+webhook:
+  replicaCount: 2

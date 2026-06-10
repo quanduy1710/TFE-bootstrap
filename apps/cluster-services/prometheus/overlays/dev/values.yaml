@@ -1,0 +1,7 @@
+# Dev overlay — shorter retention, no persistence, alertmanager disabled.
+prometheus:
+  prometheusSpec:
+    retention: 7d
+
+alertmanager:
+  enabled: false

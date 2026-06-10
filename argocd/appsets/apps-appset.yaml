@@ -1,0 +1,53 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: apps-appset
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/<org>/<repo>.git
+        revision: main
+        files:
+          # Each app directory must contain an app-config.yaml declaring its
+          # Helm chart source. The generator reads these files and exposes their
+          # fields as template variables.
+          - path: apps/workloads/**/app-config.yaml
+  template:
+    metadata:
+      name: '{{.app_name}}'
+    spec:
+      project: workloads
+      sources:
+        # Source 1: upstream Helm chart pulled from the app's declared public repo
+        - repoURL: '{{.helm_repo_url}}'
+          chart: '{{.helm_chart}}'
+          targetRevision: '{{.chart_version}}'
+          helm:
+            valueFiles:
+              # $values resolves to Source 2 (the Git repo below)
+              - $values/apps/workloads/{{.app_name}}/values.yaml
+        # Source 2: this Git repo — used only to resolve the $values reference.
+        # It does not deploy any manifests directly.
+        - repoURL: https://github.com/<org>/<repo>.git
+          targetRevision: main
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        # Uses explicit namespace from app-config.yaml if set, otherwise falls
+        # back to app_name. Use index to avoid missingkey=error on optional field.
+        namespace: '{{or (index . "namespace") .app_name}}'
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: true
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m

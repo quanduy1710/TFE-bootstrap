@@ -1,0 +1,12 @@
+# Helm values for the Istio istiod chart
+# Chart: https://istio-release.storage.googleapis.com/charts (istiod)
+# Chart version: 1.20.x — update targetRevision in istio-app.yaml
+
+pilot:
+  enabled: true
+
+global:
+  # meshID: mesh1
+  # multiCluster:
+  #   clusterName: ""
+  # network: ""
