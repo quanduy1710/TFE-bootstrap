@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bootstrap-tools.sh
-# Checks and installs required tools on Ubuntu 22.04 (EC2).
+# Checks and installs required tools on Ubuntu 24.04 (EC2).
 # Run as root or with sudo.
 #
 # Tools installed:
@@ -33,9 +33,9 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 success() { echo -e "${GREEN}[OK]${NC}    $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
-# ── Guard: Ubuntu 22.04 only ─────────────────────────────────────────────────
-if [[ "$(lsb_release -rs)" != "22.04" ]]; then
-  error "This script targets Ubuntu 22.04. Detected: $(lsb_release -rs)"
+# ── Guard: Ubuntu 24.04 only ─────────────────────────────────────────────────
+if [[ "$(lsb_release -rs)" != "24.04" ]]; then
+  error "This script targets Ubuntu 24.04. Detected: $(lsb_release -rs)"
 fi
 
 # ── Must run as root ──────────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ else
   apt-get install -y -qq software-properties-common
 
   # Add the upstream Ansible PPA so we get a current ansible-core, not the
-  # older version shipped in the Ubuntu 22.04 universe repo.
+  # older version shipped in the Ubuntu 24.04 universe repo.
   add-apt-repository --yes --update ppa:ansible/ansible
   apt-get install -y -qq ansible
   success "Ansible installed: $(ansible --version | head -n1)"
