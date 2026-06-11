@@ -12,6 +12,10 @@
 #   - Ansible           (latest ansible-core, official Ansible PPA)
 #                       + Galaxy collections for the GitLab runbook
 #                         (gitlab-ansible/requirements.yml)
+#
+# Resilience: each tool is installed as an independent step. If one step
+# fails, it is logged and skipped, and the script continues with the next
+# tool. A summary of any failures is printed at the end (non-zero exit).
 
 set -euo pipefail
 
@@ -21,6 +25,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ANSIBLE_REQUIREMENTS="${REPO_ROOT}/gitlab-ansible/requirements.yml"
 # System-wide collections path — on Ansible's default search path for all users.
 ANSIBLE_COLLECTIONS_PATH="/usr/share/ansible/collections"
+
+# Tools that failed to install (populated by run_step).
+FAILED_TOOLS=()
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'
@@ -46,147 +53,216 @@ fi
 # ── Helper: check if a command exists ────────────────────────────────────────
 is_installed() { command -v "$1" &>/dev/null; }
 
-# ── Update apt once ──────────────────────────────────────────────────────────
+# ── Helper: run one install step in isolation ────────────────────────────────
+# Runs the step function in a subshell that keeps `set -e` active, so the step
+# stops at its first failing command. If the step fails, it is recorded and the
+# script moves on to the next tool instead of aborting.
+run_step() {
+  local name="$1"; shift
+  if ( set -euo pipefail; "$@" ); then
+    return 0
+  fi
+  warn "'${name}' failed to install — skipping and continuing with the next tool."
+  FAILED_TOOLS+=("${name}")
+}
+
+# ── Update apt once (non-fatal) ────────────────────────────────────────────────
 info "Updating apt cache..."
-apt-get update -qq
+apt-get update -qq || warn "apt-get update failed — individual installs may fail and be skipped."
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. git
 # ─────────────────────────────────────────────────────────────────────────────
-if is_installed git; then
-  success "git already installed: $(git --version)"
-else
-  info "Installing git..."
-  apt-get install -y -qq git
-  success "git installed: $(git --version)"
-fi
+install_git() {
+  if is_installed git; then
+    success "git already installed: $(git --version)"
+  else
+    info "Installing git..."
+    apt-get install -y -qq git
+    success "git installed: $(git --version)"
+  fi
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. python3
 # ─────────────────────────────────────────────────────────────────────────────
-if is_installed python3; then
-  success "python3 already installed: $(python3 --version)"
-else
-  info "Installing python3..."
-  apt-get install -y -qq python3 python3-pip
-  success "python3 installed: $(python3 --version)"
-fi
+install_python3() {
+  if is_installed python3; then
+    success "python3 already installed: $(python3 --version)"
+  else
+    info "Installing python3..."
+    apt-get install -y -qq python3 python3-pip
+    success "python3 installed: $(python3 --version)"
+  fi
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. jq
 # ─────────────────────────────────────────────────────────────────────────────
-if is_installed jq; then
-  success "jq already installed: $(jq --version)"
-else
-  info "Installing jq..."
-  apt-get install -y -qq jq
-  success "jq installed: $(jq --version)"
-fi
+install_jq() {
+  if is_installed jq; then
+    success "jq already installed: $(jq --version)"
+  else
+    info "Installing jq..."
+    apt-get install -y -qq jq
+    success "jq installed: $(jq --version)"
+  fi
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. AWS CLI v2
 # ─────────────────────────────────────────────────────────────────────────────
-if is_installed aws; then
-  success "AWS CLI already installed: $(aws --version)"
-else
-  info "Installing AWS CLI v2..."
-  apt-get install -y -qq unzip curl
-  TMP_DIR=$(mktemp -d)
-  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "${TMP_DIR}/awscliv2.zip"
-  unzip -q "${TMP_DIR}/awscliv2.zip" -d "${TMP_DIR}"
-  "${TMP_DIR}/aws/install" --update
-  rm -rf "${TMP_DIR}"
-  success "AWS CLI installed: $(aws --version)"
-fi
+install_awscli() {
+  if is_installed aws; then
+    success "AWS CLI already installed: $(aws --version)"
+  else
+    info "Installing AWS CLI v2..."
+    apt-get install -y -qq unzip curl
+    TMP_DIR=$(mktemp -d)
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "${TMP_DIR}/awscliv2.zip"
+    unzip -q "${TMP_DIR}/awscliv2.zip" -d "${TMP_DIR}"
+    "${TMP_DIR}/aws/install" --update
+    rm -rf "${TMP_DIR}"
+    success "AWS CLI installed: $(aws --version)"
+  fi
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. kubectl
 # ─────────────────────────────────────────────────────────────────────────────
-if is_installed kubectl; then
-  success "kubectl already installed: $(kubectl version --client --short 2>/dev/null || kubectl version --client)"
-else
-  info "Installing kubectl (latest stable)..."
-  KUBECTL_VERSION=$(curl -fsSL "https://dl.k8s.io/release/stable.txt")
-  curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
-    -o /usr/local/bin/kubectl
-  chmod +x /usr/local/bin/kubectl
-  success "kubectl installed: $(kubectl version --client --short 2>/dev/null || kubectl version --client)"
-fi
+install_kubectl() {
+  if is_installed kubectl; then
+    success "kubectl already installed: $(kubectl version --client --short 2>/dev/null || kubectl version --client)"
+  else
+    info "Installing kubectl (latest stable)..."
+    KUBECTL_VERSION=$(curl -fsSL "https://dl.k8s.io/release/stable.txt")
+    curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+      -o /usr/local/bin/kubectl
+    chmod +x /usr/local/bin/kubectl
+    success "kubectl installed: $(kubectl version --client --short 2>/dev/null || kubectl version --client)"
+  fi
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. Terraform
 # ─────────────────────────────────────────────────────────────────────────────
-if is_installed terraform; then
-  success "Terraform already installed: $(terraform version -json | jq -r '.terraform_version')"
-else
-  info "Installing Terraform (HashiCorp apt repo)..."
-  apt-get install -y -qq gnupg software-properties-common curl
+install_terraform() {
+  if is_installed terraform; then
+    success "Terraform already installed: $(terraform version -json | jq -r '.terraform_version')"
+  else
+    info "Installing Terraform (HashiCorp apt repo)..."
+    apt-get install -y -qq gnupg software-properties-common curl
 
-  # Import HashiCorp GPG key using the modern apt keyring approach
-  curl -fsSL https://apt.releases.hashicorp.com/gpg \
-    | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    # Import HashiCorp GPG key using the modern apt keyring approach
+    curl -fsSL https://apt.releases.hashicorp.com/gpg \
+      | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
 https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
-    | tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
+      | tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
 
-  apt-get update -qq
-  apt-get install -y -qq terraform
-  success "Terraform installed: $(terraform version -json | jq -r '.terraform_version')"
-fi
+    apt-get update -qq
+    apt-get install -y -qq terraform
+    success "Terraform installed: $(terraform version -json | jq -r '.terraform_version')"
+  fi
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 7. Helm
 # ─────────────────────────────────────────────────────────────────────────────
-if is_installed helm; then
-  success "Helm already installed: $(helm version --short)"
-else
-  info "Installing Helm (official installer)..."
-  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
-    | bash
-  success "Helm installed: $(helm version --short)"
-fi
+install_helm() {
+  if is_installed helm; then
+    success "Helm already installed: $(helm version --short)"
+  else
+    info "Installing Helm (official installer)..."
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
+      | bash
+    success "Helm installed: $(helm version --short)"
+  fi
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. Ansible  (control machine for the GitLab runbook — needs 2.15+ / py3.9+)
 # ─────────────────────────────────────────────────────────────────────────────
-if is_installed ansible; then
-  success "Ansible already installed: $(ansible --version | head -n1)"
-else
-  info "Installing Ansible (official Ansible PPA)..."
-  # software-properties-common provides add-apt-repository (also pulled in by Terraform)
-  apt-get install -y -qq software-properties-common
+install_ansible() {
+  if is_installed ansible; then
+    success "Ansible already installed: $(ansible --version | head -n1)"
+  else
+    info "Installing Ansible (official Ansible PPA)..."
+    # software-properties-common provides add-apt-repository (also pulled in by Terraform)
+    apt-get install -y -qq software-properties-common
 
-  # Add the upstream Ansible PPA so we get a current ansible-core, not the
-  # older version shipped in the Ubuntu 24.04 universe repo.
-  add-apt-repository --yes --update ppa:ansible/ansible
-  apt-get install -y -qq ansible
-  success "Ansible installed: $(ansible --version | head -n1)"
-fi
+    # Add the upstream Ansible PPA so we get a current ansible-core, not the
+    # older version shipped in the Ubuntu 24.04 universe repo.
+    add-apt-repository --yes --update ppa:ansible/ansible
+    apt-get install -y -qq ansible
+    success "Ansible installed: $(ansible --version | head -n1)"
+  fi
+}
 
-# Galaxy collections required by the GitLab runbook. Installed to a system-wide
-# path so they're available no matter which user runs the playbook.
-if [[ -f "${ANSIBLE_REQUIREMENTS}" ]]; then
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. Galaxy collections required by the GitLab runbook. Installed to a
+#    system-wide path so they're available no matter which user runs the
+#    playbook. (Requires ansible to have installed successfully.)
+# ─────────────────────────────────────────────────────────────────────────────
+install_galaxy_collections() {
+  if [[ ! -f "${ANSIBLE_REQUIREMENTS}" ]]; then
+    warn "Requirements file not found at ${ANSIBLE_REQUIREMENTS} — skipping Galaxy collections."
+    warn "Run later with: ansible-galaxy collection install -r <repo>/gitlab-ansible/requirements.yml"
+    return 0
+  fi
+  if ! is_installed ansible-galaxy; then
+    error "ansible-galaxy not available — Ansible install must have failed."
+  fi
   info "Installing Galaxy collections from ${ANSIBLE_REQUIREMENTS}..."
   ansible-galaxy collection install -r "${ANSIBLE_REQUIREMENTS}" \
     -p "${ANSIBLE_COLLECTIONS_PATH}"
   success "Galaxy collections installed to ${ANSIBLE_COLLECTIONS_PATH}"
-else
-  warn "Requirements file not found at ${ANSIBLE_REQUIREMENTS} — skipping Galaxy collections."
-  warn "Run later with: ansible-galaxy collection install -r <repo>/gitlab-ansible/requirements.yml"
-fi
+}
+
+# ── Run all install steps (failures are skipped, not fatal) ─────────────────────
+run_step "git"                install_git
+run_step "python3"            install_python3
+run_step "jq"                 install_jq
+run_step "aws"                install_awscli
+run_step "kubectl"            install_kubectl
+run_step "terraform"          install_terraform
+run_step "helm"               install_helm
+run_step "ansible"            install_ansible
+run_step "galaxy-collections" install_galaxy_collections
 
 # ── Summary ───────────────────────────────────────────────────────────────────
+# Disable exit-on-error so a missing tool doesn't abort the report itself.
+set +e
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${GREEN}All tools are installed and ready.${NC}"
+if [[ ${#FAILED_TOOLS[@]} -eq 0 ]]; then
+  echo -e "${GREEN}All tools are installed and ready.${NC}"
+else
+  echo -e "${YELLOW}Finished with ${#FAILED_TOOLS[@]} failed tool(s): ${FAILED_TOOLS[*]}${NC}"
+fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-printf "  %-12s %s\n" "git"       "$(git --version)"
-printf "  %-12s %s\n" "python3"   "$(python3 --version)"
-printf "  %-12s %s\n" "jq"        "$(jq --version)"
-printf "  %-12s %s\n" "aws"       "$(aws --version)"
-printf "  %-12s %s\n" "kubectl"   "$(kubectl version --client --short 2>/dev/null || kubectl version --client)"
-printf "  %-12s %s\n" "terraform" "$(terraform version -json | jq -r '.terraform_version')"
-printf "  %-12s %s\n" "helm"      "$(helm version --short)"
-printf "  %-12s %s\n" "ansible"   "$(ansible --version | head -n1)"
+
+# Print version (or NOT INSTALLED) for each tool without aborting on failures.
+ver_line() { # $1 = label, $2 = probe command, $3 = version command string
+  if is_installed "$2"; then
+    printf "  %-12s %s\n" "$1" "$(eval "$3" 2>/dev/null | head -n1)"
+  else
+    printf "  %-12s %s\n" "$1" "NOT INSTALLED"
+  fi
+}
+
+ver_line "git"       git       'git --version'
+ver_line "python3"   python3   'python3 --version'
+ver_line "jq"        jq        'jq --version'
+ver_line "aws"       aws       'aws --version'
+ver_line "kubectl"   kubectl   'kubectl version --client --short 2>/dev/null || kubectl version --client'
+ver_line "terraform" terraform 'terraform version -json | jq -r ".terraform_version"'
+ver_line "helm"      helm      'helm version --short'
+ver_line "ansible"   ansible   'ansible --version'
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Exit non-zero if anything failed, so callers/CI can detect partial installs.
+if [[ ${#FAILED_TOOLS[@]} -gt 0 ]]; then
+  exit 1
+fi
