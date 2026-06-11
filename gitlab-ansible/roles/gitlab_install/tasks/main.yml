@@ -71,15 +71,15 @@
   failed_when: false
   changed_when: false
 
-- name: Install GitLab Omnibus (pinned version)
-  ansible.builtin.apt:
-    name: "{{ gitlab_edition }}={{ _gitlab_pkg_version }}"
-    state: present
-    allow_downgrade: false
-  environment:
-    EXTERNAL_URL: "{{ gitlab_external_url }}"
-  when: gitlab_installed_version.stdout != _gitlab_pkg_version
-  notify: reconfigure gitlab
+# - name: Install GitLab Omnibus (pinned version)
+#   ansible.builtin.apt:
+#     name: "{{ gitlab_edition }}={{ _gitlab_pkg_version }}"
+#     state: present
+#     allow_downgrade: false
+#   environment:
+#     EXTERNAL_URL: "{{ gitlab_external_url }}"
+#   when: gitlab_installed_version.stdout != _gitlab_pkg_version
+#   notify: reconfigure gitlab
 
 - name: Hold GitLab package at installed version (prevent unintended upgrades)
   ansible.builtin.dpkg_selections:
