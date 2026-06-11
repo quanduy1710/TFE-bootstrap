@@ -19,7 +19,7 @@ gitlab_version: "18.11.3"
 # SSL / TLS
 # Set gitlab_ssl_mode to one of: letsencrypt | self_signed | custom
 # ---------------------------------------------------------------------------
-gitlab_ssl_mode: "letsencrypt"
+gitlab_ssl_mode: "self_signed"
 gitlab_letsencrypt_email: "admin@example.com"       # TODO: replace with real email
 # Paths to existing cert/key — only used when gitlab_ssl_mode: self_signed
 gitlab_ssl_certificate: "/etc/gitlab/ssl/gitlab.crt"
