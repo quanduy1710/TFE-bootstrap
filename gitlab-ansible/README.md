@@ -37,7 +37,7 @@ ansible-galaxy collection install -r requirements.yml
 
 ### EC2 instance
 
-- Ubuntu 22.04 LTS (or Amazon Linux 2023 — set `ansible_user: ec2-user`)
+- Ubuntu 24.04 LTS (or Amazon Linux 2023 — set `ansible_user: ec2-user`)
 - Minimum: **4 vCPU / 8 GB RAM** (t3.xlarge recommended)
 - Minimum: **50 GB** gp3 root EBS volume
 - Security group inbound: TCP 22, 80, 443, 2222

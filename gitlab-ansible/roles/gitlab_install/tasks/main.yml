@@ -1,14 +1,14 @@
 ---
 # ---------------------------------------------------------------------------
 # Role: gitlab_install
-# Installs GitLab Omnibus on Ubuntu 22.04 (Jammy) using the official
+# Installs GitLab Omnibus on Ubuntu 24.04 (Noble) using the official
 # packages.gitlab.com APT repository.
 # ---------------------------------------------------------------------------
 
-- name: Ensure OS is Ubuntu 22.04
+- name: Ensure OS is Ubuntu 24.04
   ansible.builtin.fail:
-    msg: "This role only supports Ubuntu 22.04 (Jammy). Detected: {{ ansible_distribution }} {{ ansible_distribution_version }}"
-  when: ansible_distribution != "Ubuntu" or ansible_distribution_version != "22.04"
+    msg: "This role only supports Ubuntu 24.04 (Noble). Detected: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+  when: ansible_distribution != "Ubuntu" or ansible_distribution_version != "24.04"
 
 - name: Set package version facts
   ansible.builtin.set_fact:
