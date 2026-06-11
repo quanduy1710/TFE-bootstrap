@@ -6,7 +6,7 @@
 # ---------------------------------------------------------------------------
 
 # External URL — must be reachable by users and GitLab runners
-gitlab_external_url: "https://gitlab.example.com"   # TODO: replace with real domain
+gitlab_external_url: "https://localhost"   # TODO: replace with real domain
 
 # GitLab edition: gitlab-ee (Enterprise) or gitlab-ce (Community)
 gitlab_edition: "gitlab-ce"
