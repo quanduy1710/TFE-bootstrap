@@ -70,6 +70,43 @@
         path: /etc/apt/sources.list.d/gitlab_{{ gitlab_edition }}.list
         state: absent
 
+    # ── Kill leftover runit-supervised processes (embedded nginx etc.) ────────
+    # GitLab's nginx runs under runit via the gitlab-runsvdir service, not the
+    # apt nginx package. The supervisor can respawn the embedded nginx, so it
+    # must be stopped and removed before we delete /opt/gitlab below.
+    - name: Stop and disable the gitlab-runsvdir service
+      ansible.builtin.systemd:
+        name: gitlab-runsvdir
+        state: stopped
+        enabled: false
+      failed_when: false
+      when: _gitlab_installed | bool
+
+    - name: Remove the gitlab-runsvdir systemd unit files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/gitlab-runsvdir.service
+        - /usr/lib/systemd/system/gitlab-runsvdir.service
+        - /etc/systemd/system/multi-user.target.wants/gitlab-runsvdir.service
+      register: gitlab_runsvdir_unit
+      when: _gitlab_installed | bool
+
+    - name: Reload systemd after removing the unit files
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when:
+        - _gitlab_installed | bool
+        - gitlab_runsvdir_unit is changed
+
+    - name: Kill any processes still running from /opt/gitlab
+      ansible.builtin.command: pkill -f /opt/gitlab
+      register: gitlab_pkill
+      changed_when: gitlab_pkill.rc == 0
+      failed_when: gitlab_pkill.rc not in [0, 1]   # 0 = killed, 1 = none found
+      when: _gitlab_installed | bool
+
     # ── Remove leftover directories (only on full purge) ──────────────────────
     - name: Remove leftover GitLab directories
       ansible.builtin.file:
