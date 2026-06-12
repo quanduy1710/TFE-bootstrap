@@ -1,0 +1,91 @@
+---
+# ---------------------------------------------------------------------------
+# Playbook: uninstall.yml
+# Removes the self-hosted GitLab instance from the EC2 instance.
+#
+# By default this is a FULL removal: package + all data, config and logs.
+# To keep the data/config directories (e.g. before reinstalling), run with:
+#   -e gitlab_purge_data=false
+#
+# Usage:
+#   ansible-playbook playbooks/uninstall.yml -i inventory/hosts.yml
+#   ansible-playbook playbooks/uninstall.yml -e gitlab_purge_data=false
+# ---------------------------------------------------------------------------
+- name: Uninstall self-hosted GitLab from EC2
+  hosts: localhost
+  become: true
+  gather_facts: false
+
+  vars:
+    # Set to false to remove the package but preserve /etc/gitlab and
+    # /var/opt/gitlab (data) for a later reinstall.
+    gitlab_purge_data: true
+
+  tasks:
+    - name: Check whether the GitLab package is installed
+      ansible.builtin.command: dpkg-query -W -f='${Status}' {{ gitlab_edition }}
+      register: gitlab_pkg_status
+      failed_when: false
+      changed_when: false
+
+    - name: Set fact — is GitLab installed
+      ansible.builtin.set_fact:
+        _gitlab_installed: "{{ 'install ok installed' in gitlab_pkg_status.stdout }}"
+
+    # ── Stop / wipe via gitlab-ctl ────────────────────────────────────────────
+    - name: Remove all GitLab data and stop services (gitlab-ctl cleanse)
+      ansible.builtin.command: gitlab-ctl cleanse
+      register: gitlab_ctl_cleanse
+      failed_when: false
+      changed_when: gitlab_ctl_cleanse.rc == 0
+      when:
+        - _gitlab_installed | bool
+        - gitlab_purge_data | bool
+
+    - name: Stop GitLab services without removing data (gitlab-ctl stop)
+      ansible.builtin.command: gitlab-ctl stop
+      register: gitlab_ctl_stop
+      failed_when: false
+      changed_when: gitlab_ctl_stop.rc == 0
+      when:
+        - _gitlab_installed | bool
+        - not (gitlab_purge_data | bool)
+
+    # ── Remove the package ────────────────────────────────────────────────────
+    - name: Release the apt hold placed by the install role
+      ansible.builtin.dpkg_selections:
+        name: "{{ gitlab_edition }}"
+        selection: install
+      when: _gitlab_installed | bool
+
+    - name: Purge the GitLab package
+      ansible.builtin.apt:
+        name: "{{ gitlab_edition }}"
+        state: absent
+        purge: true
+      when: _gitlab_installed | bool
+
+    - name: Remove the GitLab APT repository definition
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/gitlab_{{ gitlab_edition }}.list
+        state: absent
+
+    # ── Remove leftover directories (only on full purge) ──────────────────────
+    - name: Remove leftover GitLab directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /opt/gitlab
+        - /var/opt/gitlab
+        - /var/log/gitlab
+        - /etc/gitlab
+      when: gitlab_purge_data | bool
+
+    - name: Report completion
+      ansible.builtin.debug:
+        msg: >-
+          GitLab ({{ gitlab_edition }}) uninstalled.
+          {{ 'All data, config and logs purged.'
+             if gitlab_purge_data | bool
+             else 'Package removed; /etc/gitlab and /var/opt/gitlab preserved.' }}
