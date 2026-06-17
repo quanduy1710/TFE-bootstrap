@@ -5,10 +5,10 @@
 # packages.gitlab.com APT repository.
 # ---------------------------------------------------------------------------
 
-- name: Ensure OS is Ubuntu 24.04
+- name: Ensure OS is Ubuntu 20.04
   ansible.builtin.fail:
-    msg: "This role only supports Ubuntu 24.04 (Noble). Detected: {{ ansible_distribution }} {{ ansible_distribution_version }}"
-  when: ansible_distribution != "Ubuntu" or ansible_distribution_version != "24.04"
+    msg: "This role only supports Ubuntu 20.04 (Noble). Detected: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+  when: ansible_distribution != "Ubuntu" or ansible_distribution_version != "20.04"
 
 - name: Set package version facts
   ansible.builtin.set_fact:
@@ -71,13 +71,16 @@
   failed_when: false
   changed_when: false
 
+# NOTE: EXTERNAL_URL is deliberately NOT set here. If it were, the omnibus
+# post-install would auto-run `gitlab-ctl reconfigure` before /etc/gitlab/gitlab.rb
+# exists — and with an https URL and no SSL config it defaults to Let's Encrypt,
+# which fails on an internal host behind a proxy. external_url and SSL are applied
+# by the gitlab_configure role, which performs the first reconfigure.
 - name: Install GitLab Omnibus (pinned version)
   ansible.builtin.apt:
     name: "{{ gitlab_edition }}={{ _gitlab_pkg_version }}"
     state: present
     allow_downgrade: false
-  environment:
-    EXTERNAL_URL: "{{ gitlab_external_url }}"
   when: gitlab_installed_version.stdout != _gitlab_pkg_version
   notify: reconfigure gitlab
 
@@ -87,15 +90,13 @@
     selection: hold
 
 # ── Service ───────────────────────────────────────────────────────────────────
+# GitLab is not yet configured at this point — the gitlab_configure role writes
+# gitlab.rb, runs `gitlab-ctl reconfigure` (which sets up and starts all
+# runit-supervised services), and then waits for readiness. We only ensure the
+# supervisor unit is enabled so it comes up on boot.
 
-- name: Ensure GitLab runsvdir service is started and enabled
+- name: Ensure GitLab runsvdir service is enabled
   ansible.builtin.service:
     name: gitlab-runsvdir
-    state: started
     enabled: true
-
-- name: Wait for GitLab services to initialise
-  ansible.builtin.wait_for:
-    path: /var/opt/gitlab/gitlab-workhorse/socket
-    timeout: 120
-  when: gitlab_installed_version.stdout != _gitlab_pkg_version
+  failed_when: false

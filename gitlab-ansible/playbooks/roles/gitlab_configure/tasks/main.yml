@@ -1,0 +1,47 @@
+---
+# ---------------------------------------------------------------------------
+# Role: gitlab_configure
+# Renders gitlab.rb from a template and reconfigures GitLab.
+# ---------------------------------------------------------------------------
+
+- name: Render /etc/gitlab/gitlab.rb from template
+  ansible.builtin.template:
+    src: gitlab.rb.j2
+    dest: /etc/gitlab/gitlab.rb
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  notify: reconfigure gitlab
+
+- name: Flush handlers to apply configuration immediately
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait until GitLab is up and routing requests
+  ansible.builtin.uri:
+    # Hit local nginx over loopback so the check never depends on external DNS
+    # or the corporate proxy. The Host header makes nginx route to the GitLab
+    # vhost exactly as a real request to the external URL would — proving the
+    # request reaches GitLab, not some other service on the host.
+    url: "https://127.0.0.1/users/sign_in"
+    headers:
+      Host: "{{ gitlab_external_url | urlsplit('hostname') }}"
+    method: GET
+    status_code: 200
+    return_content: true
+    # Don't chase a redirect to the canonical external host (would re-introduce
+    # the DNS dependency). A healthy sign-in page returns 200 directly.
+    follow_redirects: none
+    # Self-signed cert, and 127.0.0.1 won't match its CN — skip verification.
+    validate_certs: false
+    use_proxy: false
+  register: gitlab_readiness
+  retries: 30
+  delay: 15
+  # 200 proves nginx routed to the app (not a 502/boot page), and the GitLab
+  # marker in the body proves the response actually came from GitLab.
+  # NOTE: `until` takes a SINGLE expression — a YAML list is not AND-ed like
+  # `when`, so the conditions must be joined with `and`.
+  until: >-
+    gitlab_readiness.status == 200
+    and 'GitLab' in (gitlab_readiness.content | default(''))

@@ -16,6 +16,12 @@
   become: true
   gather_facts: false
 
+  # Load the GitLab config explicitly so the playbook works regardless of how
+  # the inventory is resolved (a group-less implicit localhost would otherwise
+  # never pick up inventory/group_vars/gitlab.yml). Path is relative to this file.
+  vars_files:
+    - "{{ playbook_dir }}/../inventory/group_vars/gitlab.yml"
+
   vars:
     # Set to false to remove the package but preserve /etc/gitlab and
     # /var/opt/gitlab (data) for a later reinstall.

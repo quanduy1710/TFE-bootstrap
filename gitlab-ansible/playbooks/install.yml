@@ -13,6 +13,21 @@
   become: true
   gather_facts: true
 
+  # Load the GitLab config explicitly so the playbook works regardless of how
+  # the inventory is resolved (a group-less implicit localhost would otherwise
+  # never pick up inventory/group_vars/gitlab.yml). Path is relative to this file.
+  vars_files:
+    - "{{ playbook_dir }}/../inventory/group_vars/gitlab.yml"
+
+  # Export the proxy to every task so the host can reach the internet from
+  # behind the corporate proxy (apt, get_url, the GitLab repo setup script).
+  # Equivalent to `export http_proxy=... https_proxy=...` before the run.
+  # proxy_env is defined in inventory/group_vars/gitlab.yml; defaults to {}
+  # (no proxy) when unset. Task-level environment (e.g. EXTERNAL_URL) merges
+  # on top of this. It survives become — Ansible injects the vars into the
+  # final command, so sudo env_reset does not strip them.
+  environment: "{{ proxy_env | default({}) }}"
+
   pre_tasks:
     - name: Update apt cache
       ansible.builtin.apt:
